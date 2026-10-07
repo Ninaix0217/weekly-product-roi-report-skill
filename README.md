@@ -4,6 +4,10 @@
 
 ## 安装和运行
 
+跨设备下载入口：[v0.1.0 简易版安装包](https://github.com/Ninaix0217/weekly-product-roi-report-skill/releases/tag/v0.1.0)。从 Assets 下载 `weekly-product-roi-report-v0.1.0.zip`，不要使用聊天中的本机 `C:/...` 文件链接。
+
+本仓库为私有仓库，目标设备浏览器须登录 `Ninaix0217` 或有该仓库访问权限的账号。未授权访问可能返回 404。若使用 skill-installer，指定 `--repo Ninaix0217/weekly-product-roi-report-skill --ref v0.1.0 --path weekly-product-roi-report`，并使用目标设备已有的 GitHub 凭据；本仓库没有 `main` 分支，当前默认分支是 `codex/initial-skill`。
+
 复制本仓库的 `weekly-product-roi-report/` 到 Codex 的 skills 目录，重新加载技能列表。Python 3.10+；安装依赖仅需：
 
 ```text
