@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__TITLE__</title>
+<style>
+:root{color-scheme:light dark;--foreground:light-dark(#171717,#ededed);--background:light-dark(#fff,#181818);--border:light-dark(#e7e7e7,#454545);--muted-foreground:light-dark(#737373,#b3b3b3);--viz-series-1:light-dark(#3599ff,#70b5ff)}
+*{box-sizing:border-box}body{margin:0;padding:20px 16px 30px;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif;color:var(--foreground);background:var(--background)}main{max-width:1200px;margin:auto}h2{margin:0;font-size:20px;font-weight:500}h3{font-size:18px;font-weight:500;margin:12px 0 0}.text-small{font-size:12px}.text-muted{color:var(--muted-foreground)}.tabular-nums{font-variant-numeric:tabular-nums}.form-label{display:block;width:100%}.form-select{display:block;width:100%;margin-top:4px;padding:6px 10px;font:inherit;font-size:16px;color:inherit;background:var(--background);border:1px solid var(--border);border-radius:8px}.viz-row{display:flex;flex-wrap:wrap}.table-responsive{overflow-x:auto}.table{border-collapse:collapse;width:100%}.table th,.table td{padding:9px 6px;border-bottom:1px solid var(--border)}.table th{font-weight:500;white-space:nowrap}.table th:first-child,.table td:first-child{text-align:left}.btn{border:0;padding:0;background:none;font:inherit;color:inherit;cursor:pointer;text-align:left}.cursor-interaction{cursor:pointer}.btn:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--viz-series-1);outline-offset:3px}.report-tooltip{position:fixed;z-index:10;max-width:min(400px,calc(100vw - 24px));padding:8px 10px;border:1px solid var(--border);background:var(--background);color:var(--foreground);border-radius:6px;pointer-events:none;font-size:12px}
+@media print{body{padding:0}details[open]{display:block}.form-select{border:0}.report-tooltip{display:none}}
+</style></head><body><main>
+<div id="weekly-roi-preview">
+  <h2>单品自然周投产报告</h2>
+  <div class="text-small text-muted">__SUBTITLE__</div>
+  <div class="viz-controls" style="margin-top:16px">
+    <label class="form-label" for="roi-product">查看单品 <select id="roi-product" class="form-select"></select></label>
+  </div>
+  <div id="roi-selection" class="viz-row tabular-nums" aria-live="polite"></div>
+  <div class="roi-facets">
+    <div><h3>每日综合投产比</h3><svg id="roi-ratio" class="roi-chart" role="img"></svg></div>
+    <div><h3>每日付费费用</h3><svg id="roi-cost" class="roi-chart" role="img"></svg></div>
+    <div><h3>每日真实销售额</h3><svg id="roi-sales" class="roi-chart" role="img"></svg></div>
+  </div>
+  <h3 id="roi-top-title"></h3>
+  <div class="table-responsive"><table class="table table-sm tabular-nums" id="roi-matrix-top"></table></div>
+  <details><summary class="cursor-interaction">查看其余单品</summary><div class="table-responsive"><table class="table table-sm tabular-nums" id="roi-matrix-rest"></table></div></details>
+  <div class="text-small text-muted" id="roi-scale-label" style="margin-top:12px"></div>
+</div>
+<style>
+#weekly-roi-preview .roi-facets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:10px}
+#weekly-roi-preview .roi-chart{width:100%;height:236px;display:block}
+#weekly-roi-preview .roi-chart text{fill:var(--foreground);font-size:12px;font-weight:400}
+#weekly-roi-preview .roi-heat{background:color-mix(in srgb,var(--viz-series-1) calc(var(--intensity)*1%),transparent);color:var(--foreground);}
+#weekly-roi-preview .roi-day{text-align:right;white-space:nowrap}
+#weekly-roi-preview .roi-product-cell{min-width:102px}
+#weekly-roi-preview summary{padding:14px 0;color:var(--foreground)}
+@media(max-width:850px){#weekly-roi-preview .roi-facets{grid-template-columns:1fr}}
+</style>
+<!-- __D3_LICENSE__ -->
+<script>__D3__</script>
+<script>
+(()=>{
+  const root=document.getElementById('weekly-roi-preview');
+  const data=__ROI_DATA__;
+  const money=n=>(n/100).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const ratio=n=>n===null?'—':n.toFixed(2);
+  const dates=data.dates;
+  const whole={id:'all',name:`全部 ${data.products.length} 个产品`,cost:data.total.cost,sales:data.total.sales,roi:data.total.roi,days:data.daily};
+  const products=[whole,...data.products];
+  const select=root.querySelector('#roi-product');
+  products.forEach(p=>{const option=document.createElement('option');option.value=p.id;option.textContent=p.name;select.append(option)});
+  select.value='all';
+  function renderChart(selector,product,metric,yLabel){
+    const svg=d3.select(root.querySelector(selector));
+    const width=svg.node().parentElement.getBoundingClientRect().width;
+    const height=236, left=68,right=22,top=20,bottom=52;
+    svg.attr('viewBox',`0 0 ${width} ${height}`).attr('aria-label',product.name+'的'+yLabel+'，日期为'+dates[0]+'至'+dates[6]);
+    svg.selectAll('*').remove();
+    svg.append('title').text(product.name+' '+yLabel);
+    svg.append('desc').text(product.days.map((p,i)=>`${dates[i]} ${metric==='roi'?ratio(p.roi):money(p[metric])}${metric==='roi'?'倍':'元'}`).join('；'));
+    const points=product.days.map((d,i)=>({x:i,y:metric==='roi'?d.roi:d[metric]/100,raw:d}));
+    const numbers=points.filter(d=>d.y!==null).map(d=>d.y);
+    const extent=d3.extent([...numbers,0]);
+    const pad=(extent[1]-extent[0])*0.12;
+    const y=d3.scaleLinear().domain(extent[1]>0?[0,extent[1]+pad]:[0,1]).range([height-bottom-7,top+7]);
+    const inset=metric==='roi'?8:18;
+    const x=d3.scaleLinear().domain(d3.extent(points,d=>d.x)).range([left+inset,width-right-inset]);
+    svg.append('rect').attr('data-chart-frame','').attr('x',left).attr('y',top).attr('width',width-left-right).attr('height',height-top-bottom).attr('fill','none').attr('stroke','var(--border)');
+    svg.append('g').attr('transform',`translate(${left},0)`).call(d3.axisLeft(y).ticks(4).tickSize(0).tickPadding(8).tickFormat(d3.format(extent[1]>0?'~s':'~g'))).call(g=>g.select('.domain').remove());
+    const ticks=width<380?[0,2,4,6]:[0,1,2,3,4,5,6];
+    svg.append('g').attr('transform',`translate(0,${height-bottom})`).call(d3.axisBottom(x).tickValues(ticks).tickSize(0).tickPadding(9).tickFormat(i=>dates[i].slice(5).replace('-','/'))).call(g=>g.select('.domain').remove());
+    svg.append('text').attr('class','axis-title').attr('data-axis','y').attr('x',left).attr('y',12).text(yLabel);
+    svg.append('text').attr('class','axis-title').attr('data-axis','x').attr('x',width-right).attr('y',height-4).attr('text-anchor','end').text('日期（月/日）');
+    y.ticks(4).forEach(t=>svg.append('line').attr('x1',left).attr('x2',width-right).attr('y1',y(t)).attr('y2',y(t)).attr('stroke','var(--border)').attr('stroke-width',0.5));
+    if(metric==='roi'){
+      svg.append('path').datum(points).attr('d',d3.line().defined(d=>d.y!==null).x(d=>x(d.x)).y(d=>y(d.y))).attr('fill','none').attr('stroke','var(--viz-series-1)').attr('stroke-width',2);
+      points.filter(d=>d.y!==null).forEach(d=>{
+        svg.append('circle').attr('cx',x(d.x)).attr('cy',y(d.y)).attr('r',4).attr('fill','var(--viz-series-1)');
+        svg.append('circle').attr('cx',x(d.x)).attr('cy',y(d.y)).attr('r',18).attr('fill','transparent').attr('data-chart-hit','').attr('data-tooltip',`${dates[d.x]} · 投产 ${ratio(d.y)} 倍 · 费用 ${money(d.raw.cost)} 元 · 销售 ${money(d.raw.sales)} 元`);
+      });
+      if(!numbers.length){['本周费用均为零','投产比不适用'].forEach((label,i)=>svg.append('text').attr('x',(left+width-right)/2).attr('y',height/2+i*20).attr('text-anchor','middle').text(label));}
+    }else{
+      const barwidth=Math.min(24,(width-left-right)/12);
+      points.forEach(d=>svg.append('rect').attr('x',x(d.x)-barwidth/2).attr('y',y(d.y)).attr('width',barwidth).attr('height',y(0)-y(d.y)).attr('fill','var(--viz-series-1)').attr('fill-opacity',metric==='sales'?0.8:0.45).attr('data-tooltip',`${dates[d.x]} · ${yLabel} ${money(d.raw[metric])}`));
+    }
+    // Record measured label separation for the verification step.
+    const box=svg.node().getBoundingClientRect();
+    svg.attr('data-chart-measured-width',box.width.toFixed(1));
+  }
+  function update(save){
+    const p=products.find(p=>p.id===select.value);
+    root.querySelector('#roi-selection').textContent=`本周投产 ${ratio(p.roi)} 倍　费用 ${money(p.cost)} 元　真实销售 ${money(p.sales)} 元`;
+    renderChart('#roi-ratio',p,'roi','投产比（倍）');
+    renderChart('#roi-cost',p,'cost','费用（元）');
+    renderChart('#roi-sales',p,'sales','真实销售额（元）');
+  }
+  const ratios=data.products.flatMap(p=>p.days.map(d=>d.roi)).filter(n=>n!==null).sort(d3.ascending);
+  const cap=d3.quantileSorted(ratios,0.9) || 1;
+  const intensity=d3.scaleLinear().domain([0,cap]).range([0,40]).clamp(true);
+  function buildTable(id,items){
+    const table=root.querySelector(id);const head=table.createTHead();const tr=head.insertRow();
+    ['产品',...dates.map(x=>x.slice(5).replace('-','/')),'本周费用（元）','本周销售（元）','本周投产'].forEach((title,i)=>{const th=document.createElement('th');th.textContent=title;th.scope='col';if(i)th.className='roi-day';tr.append(th)});
+    const body=table.createTBody();
+    items.forEach(p=>{
+      const row=body.insertRow();const productCell=row.insertCell();productCell.className='roi-product-cell';
+      const button=document.createElement('button');button.className='btn btn-ghost';button.type='button';button.textContent=p.name;button.addEventListener('click',()=>{select.value=p.id;update(true)});productCell.append(button);
+      p.days.forEach((d,i)=>{const cell=row.insertCell();cell.className='roi-day'+(d.roi===null?'':' roi-heat');cell.textContent=ratio(d.roi);cell.style.setProperty('--intensity',d.roi===null?0:intensity(d.roi));cell.setAttribute('data-tooltip',`${p.name} · ${dates[i]} · 费用 ${money(d.cost)} 元 · 销售 ${money(d.sales)} 元${d.roi===null?' · 零费用，比值不适用':''}`)});
+      [money(p.cost),money(p.sales),ratio(p.roi)].forEach(value=>{const c=row.insertCell();c.className='roi-day';c.textContent=value});
+    });
+  }
+  buildTable('#roi-matrix-top',data.products.slice(0,10));buildTable('#roi-matrix-rest',data.products.slice(10));
+  root.querySelector('#roi-top-title').textContent=`费用最大的 ${Math.min(10,data.products.length)} 个单品`;
+  root.querySelector('details').hidden=data.products.length<=10;
+  root.querySelector('summary').textContent=`查看其余 ${Math.max(0,data.products.length-10)} 个单品`;
+  root.querySelector('#roi-scale-label').textContent=ratios.length?`日投产比：色深表示数值大小；≥ ${cap.toFixed(2)} 倍使用最深色；“—”表示费用为零，无法计算比值。`:'日投产比：“—”表示费用为零，无法计算比值。';
+  select.addEventListener('change',()=>update(true));
+  let lastWidth=0;new ResizeObserver(()=>{const w=root.getBoundingClientRect().width;if(Math.abs(w-lastWidth)>1){lastWidth=w;update(false)}}).observe(root);
+  update(false);
+})();
+</script>
+
+</main><div id="report-tooltip" class="report-tooltip" role="tooltip" hidden></div>
+<script>
+(()=>{
+ const tip=document.getElementById('report-tooltip');let pinned=false;
+ function show(target){tip.textContent=target.dataset.tooltip;tip.hidden=false;const r=target.getBoundingClientRect();const b=tip.getBoundingClientRect();tip.style.left=Math.max(12,Math.min(r.left,innerWidth-b.width-12))+'px';tip.style.top=Math.max(12,Math.min(r.bottom+8,innerHeight-b.height-12))+'px';}
+ function hide(){tip.hidden=true;pinned=false;}
+ document.addEventListener('pointerover',e=>{const target=e.target.closest('[data-tooltip]');if(target)show(target);else if(!pinned)hide()});
+ document.addEventListener('focusin',e=>{const target=e.target.closest('[data-tooltip]');if(target)show(target)});
+ document.addEventListener('focusout',hide);
+ document.addEventListener('click',e=>{const target=e.target.closest('[data-tooltip]');if(target){pinned=true;show(target)}else hide()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')hide()});
+ document.getElementById('roi-product').addEventListener('change',hide);
+ document.addEventListener('scroll',hide,true);
+})();
+</script></body></html>
