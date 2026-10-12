@@ -1,4 +1,4 @@
 interface:
   display_name: "单品自然周投产报告"
-  short_description: "把已填写的综合投产日报汇总成自然周单品趋势图和热力表，离线查看"
+  short_description: "生成自然周单品离线报表，默认简易版，明确请求时支持两周环比候选版"
   default_prompt: "使用 $weekly-product-roi-report，将我提供的日报生成一个完整自然周的简洁版离线 HTML。"

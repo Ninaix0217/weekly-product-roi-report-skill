@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__TITLE__</title>
+<style>
+:root{color-scheme:light dark;--fg:light-dark(#171717,#ededed);--bg:light-dark(#fff,#181818);--line:light-dark(#e4e4e4,#454545);--muted:light-dark(#666,#bbb);--current:light-dark(#2688ea,#70b5ff);--previous:light-dark(#687580,#b4bec6)}
+*{box-sizing:border-box}body{margin:0;padding:24px 16px 36px;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg)}main{max-width:1240px;margin:auto}h1{font-size:22px;font-weight:500;margin:0 0 4px}h2{font-size:18px;font-weight:500;margin:18px 0 8px}h3{font-size:16px;font-weight:500;margin:0 0 8px}p{margin:6px 0}.muted{color:var(--muted)}.small{font-size:12px}.number{font-variant-numeric:tabular-nums}.controls{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0 12px}.controls label{flex:1;min-width:min(100%,240px)}select{display:block;width:100%;font:inherit;font-size:16px;padding:7px 10px;margin-top:4px;border:1px solid var(--line);border-radius:7px;color:inherit;background:var(--bg)}button,summary{cursor:pointer}button{font:inherit;color:inherit;background:none;border:0;text-align:left;padding:2px 0}.link-button{text-decoration:underline;text-underline-offset:3px}button:focus-visible,summary:focus-visible,select:focus-visible{outline:2px solid var(--current);outline-offset:3px}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:14px 0}.metric{border-bottom:1px solid var(--line);padding:4px 0 12px}.value{font-size:22px;font-weight:500}.metric p{margin:4px 0}.chart-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.chart{width:100%;height:244px;display:block}.chart text{font-size:12px;fill:var(--fg)}.legend{display:flex;gap:20px;flex-wrap:wrap;margin:14px 0 8px}.swatch{display:inline-block;width:22px;vertical-align:middle;margin-right:6px;border-top:2px solid var(--current)}.swatch.previous{border-top:2px dashed var(--previous)}.table-wrap{overflow:auto;max-width:100%}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 7px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th{font-weight:500}th:first-child,td:first-child{text-align:left}td:first-child{min-width:116px}.heat{background:color-mix(in srgb,var(--current) calc(var(--intensity)*1%),transparent)}details{margin:12px 0}summary{padding:6px 0}.heat-table th.week-label{text-align:center}.heat-table .week-break{border-left:2px solid var(--line)}.tooltip{position:fixed;z-index:10;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);max-width:min(410px,calc(100vw - 24px));font-size:12px;pointer-events:none}#scope-note{max-width:880px}#empty{padding:14px 0}#heat-details{border-top:1px solid var(--line);padding-top:6px}
+@media(max-width:850px){.chart-grid{grid-template-columns:1fr}.metrics{gap:12px}.value{font-size:20px}}
+@media(max-width:560px){.metrics{grid-template-columns:1fr}.controls{gap:10px}.controls label{min-width:100%}body{padding-top:18px}}
+@media print{.tooltip,.controls{display:none}details{display:block}}
+</style></head><body><main id="roi-comparison">
+<h1>单品自然周环比报告</h1>
+<p id="periods" class="muted small"></p>
+<p id="scope-note" class="muted small"></p>
+<div class="controls">
+ <label for="roi-product">查看单品<select id="roi-product"></select></label>
+</div>
+<div id="metrics" class="metrics number" aria-live="polite"></div>
+<p id="selected-product" class="small"></p>
+<div class="legend small"><span><i class="swatch previous" aria-hidden="true"></i><span id="previous-label"></span></span><span><i class="swatch" aria-hidden="true"></i><span id="current-label"></span></span></div>
+<div class="chart-grid">
+ <div><h3>每日综合投产比</h3><svg id="ratio-chart" class="chart" role="img"></svg></div>
+ <div><h3>每日付费费用</h3><svg id="cost-chart" class="chart" role="img"></svg></div>
+ <div><h3>每日真实销售额</h3><svg id="sales-chart" class="chart" role="img"></svg></div>
+</div>
+<h2>单品周环比</h2>
+<p id="table-summary" class="muted small"></p>
+<div class="table-wrap"><table id="comparison-top" aria-label="单品周环比前十项"></table></div>
+<details id="comparison-rest-details"><summary id="rest-label"></summary><div class="table-wrap"><table id="comparison-rest" aria-label="单品周环比其余项"></table></div></details>
+<details id="heat-details"><summary>查看两周每日投产热力表</summary><p class="small muted" id="heat-legend"></p><div class="table-wrap"><table id="daily-heatmap" class="heat-table" aria-label="两周每日投产比"></table></div></details>
+<details><summary>计算口径</summary><p class="small muted">每周投产＝该周真实销售额合计÷付费费用合计，环比＝本周值÷上周值−1；投产变化另列倍数差。费用为零时投产不适用；上周基数为零时百分比环比不可计算。金额沿用已填写日报及其相关公式，未核验上游账务，刷单空白不等于确认无刷单。</p></details>
+</main><div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+<!-- __D3_LICENSE__ -->
+<script>__D3__</script>
+<script>
+(()=>{
+ const data=__ROI_DATA__;
+ const root=document.getElementById('roi-comparison');
+ const byId=id=>root.querySelector('#'+id);
+ const money=n=>n===null||n===undefined?'—':(n/100).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const ratio=n=>n===null||n===undefined?'—':n.toFixed(2);
+ const signed=n=>n===null?'—':(n>0?'+':'')+(n!==0&&Math.abs(n)<.005?n.toPrecision(2):n.toFixed(2));
+ const pct=c=>c.pct===null?(c.reason==='baseline_zero'?'不可算（上周为0）':'不可算'):(c.pct>0?'+':'')+c.pct.toFixed(1)+'%';
+ const range=period=>period.start.slice(5).replace('-','/')+'—'+period.end.slice(5).replace('-','/');
+ const periods=data.periods;
+ byId('periods').textContent=`上周 ${periods[0].start}—${periods[0].end}　对比　本周 ${periods[1].start}—${periods[1].end} · 两个完整自然周`;
+ const a=data.audit;
+ byId('scope-note').textContent=`同店铺 SKU 组合匹配：两周共同 ${a.matched_products} 个，本周独有 ${a.current_only_products} 个，上周独有 ${a.previous_only_products} 个。`+(a.current_only_products||a.previous_only_products?'整体环比包含产品范围变化；缺少一周记录的单品不计算环比。':'');
+ byId('previous-label').textContent='上周 '+range(periods[0]);byId('current-label').textContent='本周 '+range(periods[1]);
+ const whole={id:'all',name:'全部产品（整体周汇总）',previous:{...data.totals.previous,days:data.dailyTotals[0]},current:{...data.totals.current,days:data.dailyTotals[1]},changes:data.totals.changes};
+ const select=byId('roi-product');
+ const metricDefinitions=[['roi','周综合投产比',ratio,'倍'],['cost','周付费费用',money,'元'],['sales','周真实销售额',money,'元']];
+ function currentProduct(){return select.value==='all'?whole:data.products.find(p=>p.id===select.value)}
+ function updateMetrics(p){
+  byId('metrics').replaceChildren();
+  for(const [key,label,format,unit] of metricDefinitions){
+   const c=p.changes[key==='roi'?'roi':key+'_cents'];const box=document.createElement('section');box.className='metric';box.dataset.metric=key;
+   const labelNode=document.createElement('div');labelNode.className='muted small';labelNode.textContent=label;
+   const value=document.createElement('div');value.className='value';value.textContent=format(p.current?.[key])+' '+unit;
+   const old=document.createElement('p');old.className='small muted';old.textContent='上周 '+format(p.previous?.[key])+' '+unit;
+   const delta=document.createElement('p');delta.className='small';delta.textContent=key==='roi'?`变化 ${signed(c.delta)} 倍 · 环比 ${pct(c)}`:`环比 ${pct(c)}`;
+   box.append(labelNode,value,old,delta);byId('metrics').append(box);
+  }
+  byId('selected-product').textContent=p.id==='all'?'当前查看全部产品。':p.name;
+ }
+ function chart(id,p,metric,label){
+  const svg=d3.select(byId(id));const width=svg.node().parentElement.getBoundingClientRect().width;const height=244,left=68,right=24,top=22,bottom=48;
+  svg.selectAll('*').remove();svg.attr('viewBox',`0 0 ${width} ${height}`).attr('aria-label',p.name+'两周'+label+'，按周一至周日对齐');svg.append('title').text(p.name+' 两周'+label);
+  const series=['previous','current'].map((side,w)=>({side,w,points:p[side]?p[side].days.map((d,i)=>({x:i,y:metric==='roi'?d.roi:d[metric]/100,raw:d})):[]}));
+  const values=series.flatMap(s=>s.points.filter(d=>d.y!==null).map(d=>d.y));const maximum=d3.max([...values,0]);
+  const y=d3.scaleLinear().domain([0,maximum>0?maximum*1.12:1]).range([height-bottom-7,top+7]);const x=d3.scaleLinear().domain([0,6]).range([left+14,width-right-14]);
+  svg.append('rect').attr('data-chart-frame','').attr('x',left).attr('y',top).attr('width',width-left-right).attr('height',height-top-bottom).attr('fill','none').attr('stroke','var(--line)');
+  const tickFormat=d3.format(metric==='roi'||maximum<1000?'~g':'~s');
+  svg.append('g').attr('transform',`translate(${left},0)`).call(d3.axisLeft(y).ticks(4).tickSize(0).tickPadding(8).tickFormat(tickFormat)).call(g=>g.select('.domain').remove());
+  y.ticks(4).forEach(t=>svg.append('line').attr('x1',left).attr('x2',width-right).attr('y1',y(t)).attr('y2',y(t)).attr('stroke','var(--line)').attr('stroke-width',.5));
+  svg.append('g').attr('transform',`translate(0,${height-bottom})`).call(d3.axisBottom(x).tickValues(width<380?[0,2,4,6]:[0,1,2,3,4,5,6]).tickSize(0).tickPadding(9).tickFormat(i=>'周'+['一','二','三','四','五','六','日'][i])).call(g=>g.select('.domain').remove());
+  svg.append('text').attr('x',left).attr('y',13).attr('class','axis-title').attr('data-axis','y').text(label);svg.append('text').attr('x',width-right).attr('y',height-4).attr('text-anchor','end').attr('class','axis-title').attr('data-axis','x').text('星期（两周同日对齐）');
+  const barwidth=Math.min(10,(width-left-right)/24);
+  for(const s of series){
+   const color=s.side==='current'?'var(--current)':'var(--previous)';
+   if(metric==='roi'){
+    svg.append('path').attr('data-series',s.side).attr('data-mark','').datum(s.points).attr('d',d3.line().defined(d=>d.y!==null).x(d=>x(d.x)).y(d=>y(d.y))).attr('fill','none').attr('stroke',color).attr('stroke-width',2).attr('stroke-dasharray',s.side==='previous'?'5,4':null);
+    s.points.filter(d=>d.y!==null).forEach(d=>svg.append('circle').attr('data-mark','').attr('data-series',s.side).attr('cx',x(d.x)).attr('cy',y(d.y)).attr('r',s.side==='current'?4:3).attr('fill',color));
+   }else{s.points.forEach(d=>svg.append('rect').attr('data-mark','').attr('data-series',s.side).attr('x',x(d.x)+(s.side==='previous'?-barwidth-1:1)).attr('y',y(d.y)).attr('width',barwidth).attr('height',y(0)-y(d.y)).attr('fill',color).attr('fill-opacity',s.side==='current'?.85:.55))}
+  }
+  if(metric==='roi'&&!values.length){['两周费用均为零或记录缺失','投产比不适用'].forEach((text,i)=>svg.append('text').attr('x',(left+width-right)/2).attr('y',height/2+i*19).attr('text-anchor','middle').text(text))}
+  for(let i=0;i<7;i++){
+   const text=series.filter(s=>s.points.length).map(s=>{const d=s.points[i];return `${s.side==='previous'?'上周':'本周'} ${periods[s.w].dates[i]} · 投产 ${ratio(d.raw.roi)} 倍 · 费用 ${money(d.raw.cost)} 元 · 销售 ${money(d.raw.sales)} 元`}).join('；');
+   svg.append('rect').attr('data-chart-hit','').attr('data-tooltip',text).attr('tabindex',0).attr('x',x(i)-16).attr('y',top).attr('width',32).attr('height',height-top-bottom).attr('fill','transparent');
+  }
+  svg.append('desc').text(series.map(s=>s.points.map((d,i)=>`${periods[s.w].dates[i]} ${metric==='roi'?ratio(d.raw.roi):money(d.raw[metric])}`).join('；')).join('；'));
+ }
+ function update(){const p=currentProduct();updateMetrics(p);chart('ratio-chart',p,'roi','投产比（倍）');chart('cost-chart',p,'cost','费用（元）');chart('sales-chart',p,'sales','真实销售额（元）');document.getElementById('tooltip').hidden=true}
+ function cell(row,value,role){const c=row.insertCell();c.textContent=value;if(role)c.dataset.column=role;return c}
+ function table(id,items){
+  const element=byId(id);element.replaceChildren();const head=element.createTHead().insertRow();
+  ['产品','上周投产','本周投产','变化（倍）','投产环比','本周费用（元）','费用环比','本周销售（元）','销售环比'].forEach((title,i)=>{const th=document.createElement('th');th.textContent=title;th.scope='col';head.append(th)});
+  const body=element.createTBody();for(const p of items){
+   const row=body.insertRow();row.dataset.product=p.id;const name=cell(row,'','product');const button=document.createElement('button');button.textContent=p.name;button.className='link-button';button.addEventListener('click',()=>{select.value=p.id;update()});name.append(button);
+   cell(row,ratio(p.previous?.roi),'previous_roi');cell(row,ratio(p.current?.roi),'current_roi');cell(row,signed(p.changes.roi.delta),'roi_delta');cell(row,pct(p.changes.roi),'roi_pct');
+   cell(row,money(p.current?.cost),'cost');cell(row,pct(p.changes.cost_cents),'cost_pct');cell(row,money(p.current?.sales),'sales');cell(row,pct(p.changes.sales_cents),'sales_pct');
+  }
+ }
+ const values=data.products.flatMap(p=>[p.previous,p.current].filter(Boolean).flatMap(w=>w.days.map(d=>d.roi))).filter(v=>v!==null).sort(d3.ascending);const cap=d3.quantileSorted(values,.9)||1;const intensity=d3.scaleLinear().domain([0,cap]).range([0,40]).clamp(true);
+ function heatmap(items){
+  const element=byId('daily-heatmap');element.replaceChildren();const head=element.createTHead();const groups=head.insertRow();const name=document.createElement('th');name.textContent='产品';name.rowSpan=2;name.scope='col';groups.append(name);
+  for(let w=0;w<2;w++){const th=document.createElement('th');th.textContent=(w?'本周 ':'上周 ')+range(periods[w]);th.colSpan=7;th.scope='colgroup';th.className='week-label';groups.append(th)}
+  const dates=head.insertRow();for(let w=0;w<2;w++)for(let i=0;i<7;i++){const th=document.createElement('th');th.textContent=periods[w].dates[i].slice(5).replace('-','/');th.scope='col';if(w===1&&i===0)th.className='week-break';dates.append(th)}
+  const body=element.createTBody();for(const p of items){const row=body.insertRow();cell(row,p.name);for(let w=0;w<2;w++)for(let i=0;i<7;i++){
+   const d=p[w?'current':'previous']?.days[i];const c=cell(row,d?ratio(d.roi):'无记录');if(w===1&&i===0)c.classList.add('week-break');
+   if(d){if(d.roi!==null){c.classList.add('heat');c.style.setProperty('--intensity',intensity(d.roi))}c.dataset.tooltip=`${p.name} · ${periods[w].dates[i]} · 费用 ${money(d.cost)} 元 · 真实销售 ${money(d.sales)} 元`}
+  }}
+  byId('heat-legend').textContent=values.length?`色深表示日投产大小；≥ ${cap.toFixed(2)} 倍使用最深色。“—”表示零费用，比值不可计算。`:'“—”表示零费用，比值不可计算；“无记录”不能解释为零。';
+ }
+ function initializeProducts(){
+  const items=data.products;
+  for(const p of [whole,...items]){const option=document.createElement('option');option.value=p.id;option.textContent=p.name;select.append(option)}select.value='all';
+  table('comparison-top',items.slice(0,10));table('comparison-rest',items.slice(10));heatmap(items);
+  byId('comparison-rest-details').hidden=items.length<=10;byId('rest-label').textContent=`查看其余 ${Math.max(0,items.length-10)} 个单品`;
+  byId('table-summary').textContent=`共 ${items.length} 个单品，按本周费用从高到低排列。`;
+  update();
+ }
+ select.addEventListener('change',update);
+ let lastWidth=0;new ResizeObserver(()=>{const width=root.getBoundingClientRect().width;if(Math.abs(width-lastWidth)>1){lastWidth=width;update()}}).observe(root);
+ initializeProducts();
+ const tip=document.getElementById('tooltip');let pinned=false;
+ function show(target){tip.textContent=target.dataset.tooltip;tip.hidden=false;const r=target.getBoundingClientRect(),b=tip.getBoundingClientRect();tip.style.left=Math.max(12,Math.min(r.left,innerWidth-b.width-12))+'px';tip.style.top=Math.max(12,Math.min(r.bottom+8,innerHeight-b.height-12))+'px'}
+ function hide(){tip.hidden=true;pinned=false}
+ document.addEventListener('pointerover',e=>{const target=e.target.closest('[data-tooltip]');if(target)show(target);else if(!pinned)hide()});document.addEventListener('focusin',e=>{const target=e.target.closest('[data-tooltip]');if(target)show(target)});document.addEventListener('focusout',hide);document.addEventListener('click',e=>{const target=e.target.closest('[data-tooltip]');if(target){pinned=true;show(target)}else hide()});document.addEventListener('keydown',e=>{if(e.key==='Escape')hide()});document.addEventListener('scroll',hide,true);
+})();
+</script></body></html>

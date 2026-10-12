@@ -19,7 +19,17 @@ python -m venv .venv
 
 Windows 的 venv-python 是 `.venv/Scripts/python.exe`，Linux/macOS 是 `.venv/bin/python`。在已有合适环境中无需建立 venv。输出目录不能已存在；原表和先前报告都保留。
 
-输出 HTML 的数据、图表库和样式均内嵌，复制 HTML 到另一台设备即可打开。当前版本不实现周环比、经营状态或筛选，完整输入规则和验证范围见 [SKILL.md](weekly-product-roi-report/SKILL.md) 与 [schema.md](weekly-product-roi-report/references/schema.md)。
+输出 HTML 的数据、图表库和样式均内嵌，复制 HTML 到另一台设备即可打开。稳定版 v0.1.0 不实现周环比、经营状态或筛选；默认简易版入口也不自动上新。完整输入规则和验证范围见 [SKILL.md](weekly-product-roi-report/SKILL.md) 与 [schema.md](weekly-product-roi-report/references/schema.md)。
+
+## 两周候选版
+
+`codex/two-week-comparison` 分支加入显式调用的两周环比模式，版本 `0.2.0-rc.2`。v0.1.0 安装包、已安装稳定版及 `weekly_roi.py` 简易版入口保留。用户明确请求时运行：
+
+```text
+python weekly-product-roi-report/scripts/compare_weeks.py --input-dir <含两周日报的目录> --week-start <本周周一日期> --output-dir <新的运行目录>
+```
+
+只实现自然周环比：同星期对齐的三图、周投产/费用/销售变化、按本周费用降序的单品表和两周热力表。根据反馈取消经营状态与有费无销复核，帮助用户集中查看投入和投产变化。零基数百分比不伪造，缺一周记录不填零；不设低费用高比值阈值。候选使用和验证见 [comparison.md](weekly-product-roi-report/references/comparison.md)。当前候选供反馈，尚未替代稳定版。
 
 ## 测试
 
