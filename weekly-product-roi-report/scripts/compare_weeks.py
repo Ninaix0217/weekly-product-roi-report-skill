@@ -14,13 +14,7 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import weekly_roi as base
 
-VERSION = '0.2.0-rc.1'
-
-
-def state(cost, sales):
-    if cost > 0:
-        return 'paid_sales' if sales > 0 else 'paid_no_sales'
-    return 'unpaid_sales' if sales > 0 else 'zero_both'
+VERSION = '0.2.0-rc.2'
 
 
 def change(previous, current):
@@ -30,17 +24,6 @@ def change(previous, current):
     delta = current - previous
     pct = float((Decimal(str(current)) / Decimal(str(previous)) - 1) * 100) if previous > 0 else None
     return {'delta': delta, 'pct': pct, 'reason': 'baseline_zero' if previous == 0 else None}
-
-
-def enrich(record):
-    if record is None:
-        return None
-    result = {**record, 'state': state(record['cost_cents'], record['sales_cents'])}
-    if 'daily' in record:
-        result['daily'] = [enrich(day) for day in record['daily']]
-        result['day_states'] = dict(Counter(day['state'] for day in result['daily']))
-        result['paid_no_sales_cost_cents'] = sum(day['cost_cents'] for day in result['daily'] if day['state'] == 'paid_no_sales')
-    return result
 
 
 def assemble(previous, current):
@@ -67,7 +50,7 @@ def assemble(previous, current):
                 sku_bindings[identity] = key
     products = []
     for key in set(by_week[0]) | set(by_week[1]):
-        old, new = [enrich(w.get(key)) for w in by_week]
+        old, new = [w.get(key) for w in by_week]
         info = new or old
         membership = 'both' if old and new else ('current_only' if new else 'previous_only')
         changes = {metric: change(old.get(metric) if old else None, new.get(metric) if new else None)
@@ -83,21 +66,10 @@ def assemble(previous, current):
         cost = sum(p[side]['cost_cents'] for p in matched)
         sales = sum(p[side]['sales_cents'] for p in matched)
         matched_totals.append({'cost_cents': cost, 'sales_cents': sales, 'roi': base.ratio(cost, sales)})
-    weekly_states, daily_states, review = [], [], []
-    for side in ('previous', 'current'):
-        available = [p[side] for p in products if p[side] is not None]
-        weekly_states.append(dict(Counter(p['state'] for p in available)))
-        daily_states.append(dict(Counter(d['state'] for p in available for d in p['daily'])))
-        review.append({'product_count': sum(p['day_states'].get('paid_no_sales', 0) > 0 for p in available),
-                       'day_count': sum(p['day_states'].get('paid_no_sales', 0) for p in available),
-                       'cost_cents': sum(p['paid_no_sales_cost_cents'] for p in available)})
     return {'version': VERSION, 'mode': 'two_complete_natural_weeks',
             'previous': previous, 'current': current, 'products': products,
-            'totals': {'previous': enrich(previous['totals']), 'current': enrich(current['totals']), 'changes': total_changes},
+            'totals': {'previous': previous['totals'], 'current': current['totals'], 'changes': total_changes},
             'matched_totals': {'previous': matched_totals[0], 'current': matched_totals[1]},
-            'states': {'previous': weekly_states[0], 'current': weekly_states[1],
-                       'previous_daily': daily_states[0], 'current_daily': daily_states[1]},
-            'review': {'previous': review[0], 'current': review[1]},
             'audit': {'status': 'PASS', 'weeks': 2, 'source_count': len(previous['sources']) + len(current['sources']),
                       'record_count': previous['audit']['record_count'] + current['audit']['record_count'],
                       'matched_products': len(matched), 'current_only_products': sum(p['membership'] == 'current_only' for p in products),
@@ -118,11 +90,9 @@ def render(analysis):
     def display_week(record):
         if record is None:
             return None
-        result = {'cost': record['cost_cents'], 'sales': record['sales_cents'], 'roi': record['roi'], 'state': record['state']}
+        result = {'cost': record['cost_cents'], 'sales': record['sales_cents'], 'roi': record['roi']}
         if 'daily' in record:
             result['days'] = [display_week(d) for d in record['daily']]
-            result['dayStates'] = record['day_states']
-            result['reviewCost'] = record['paid_no_sales_cost_cents']
         return result
     labels = Counter(p['product'] for p in analysis['products'])
     data = {'version': VERSION, 'periods': [analysis[side]['period'] for side in ('previous', 'current')],
@@ -132,8 +102,8 @@ def render(analysis):
                           'current': display_week(p['current']), 'changes': p['changes']} for p in analysis['products']],
             'totals': {'previous': display_week(analysis['totals']['previous']), 'current': display_week(analysis['totals']['current']),
                        'changes': analysis['totals']['changes']},
-            'dailyTotals': [[display_week(enrich(d)) for d in analysis[side]['daily_totals']] for side in ('previous', 'current')],
-            'states': analysis['states'], 'review': analysis['review'], 'audit': analysis['audit']}
+            'dailyTotals': [[display_week(d) for d in analysis[side]['daily_totals']] for side in ('previous', 'current')],
+            'audit': analysis['audit']}
     payload = json.dumps(data, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
     payload = payload.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     title = f"单品自然周环比报告 {analysis['current']['period']['start']}—{analysis['current']['period']['end']}"
@@ -165,7 +135,7 @@ def run(input_dir, output_dir, current_week_start):
             stage.rmdir()
     return {'status': 'COMPLETE', 'version': VERSION, 'html': str((output_dir / filename).resolve()),
             'analysis': str((output_dir / 'analysis.json').resolve()), 'audit': analysis['audit'],
-            'totals': analysis['totals'], 'states': analysis['states'], 'review': analysis['review']}
+            'totals': analysis['totals']}
 
 
 def main():

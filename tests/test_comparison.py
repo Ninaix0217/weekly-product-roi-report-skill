@@ -51,34 +51,33 @@ class ComparisonTests(unittest.TestCase):
         self.assertIsNone(compare.change(None, 2)['delta'])
         self.assertEqual(compare.change(2, 0)['pct'], -100)
 
-    def test_weekly_state_does_not_hide_paid_no_sales_days(self):
+    def test_zero_sales_remains_numeric_zero_without_review(self):
         result = compare.analyze(self.inputs, '2026-10-05')
         product = next(p for p in result['products'] if p['product'] == '合成产品丙')
-        self.assertEqual(product['current']['state'], 'paid_no_sales')
-        self.assertEqual(product['current']['day_states']['paid_no_sales'], 7)
-        self.assertEqual(result['review']['current']['day_count'], 7)
-        self.assertEqual(result['review']['current']['cost_cents'], 7000)
-        mixed = next(p for p in result['products'] if p['product'] == '合成产品甲')
-        self.assertEqual(mixed['current']['state'], 'paid_sales')
+        self.assertEqual(product['current']['roi'], 0)
+        self.assertEqual(product['current']['sales_cents'], 0)
+        self.assertNotIn('states', result)
+        self.assertNotIn('review', result)
 
-    def test_all_four_states_are_observation_only(self):
-        self.assertEqual(compare.state(100, 200), 'paid_sales')
-        self.assertEqual(compare.state(100, 0), 'paid_no_sales')
-        self.assertEqual(compare.state(0, 200), 'unpaid_sales')
-        self.assertEqual(compare.state(0, 0), 'zero_both')
+    def test_zero_cost_sales_remains_unavailable_ratio(self):
+        result = compare.analyze(self.inputs, '2026-10-05')
+        product = next(p for p in result['products'] if p['product'] == '合成产品乙')
+        self.assertEqual(product['current']['cost_cents'], 0)
+        self.assertGreater(product['current']['sales_cents'], 0)
+        self.assertIsNone(product['current']['roi'])
+        self.assertIsNone(product['changes']['roi']['pct'])
 
-    def test_mixed_daily_warning_remains_in_weekly_paid_sales(self):
+    def test_zero_sales_day_keeps_weighted_weekly_accounting(self):
         products = [{'name': '合成产品甲', 'skus': ['sample-001', 'sample-002'], 'cost': 100, 'sales': 0},
                     {'name': '合成产品乙', 'skus': ['sample-003'], 'cost': 0, 'sales': 0},
                     {'name': '合成产品丙', 'skus': ['sample-004'], 'cost': 10, 'sales': 0}]
         workbook(self.new[0], date(2026, 10, 5), products=products)
         result = compare.analyze(self.inputs, '2026-10-05')
-        mixed = next(p for p in result['products'] if p['product'] == '合成产品甲')
-        self.assertEqual(mixed['current']['state'], 'paid_sales')
-        self.assertEqual(mixed['current']['day_states']['paid_no_sales'], 1)
-        self.assertEqual(mixed['current']['paid_no_sales_cost_cents'], 10000)
-        self.assertEqual(result['review']['current']['day_count'], 8)
-        self.assertEqual(result['review']['current']['product_count'], 2)
+        product = next(p for p in result['products'] if p['product'] == '合成产品甲')
+        self.assertEqual(product['current']['daily'][0]['roi'], 0)
+        self.assertEqual(product['current']['cost_cents'], 280000)
+        self.assertEqual(product['current']['sales_cents'], 600000)
+        self.assertAlmostEqual(product['current']['roi'], 600000 / 280000)
 
     def test_current_only_record_is_not_previous_zero(self):
         additions = [{'name': '合成新增记录', 'skus': ['new-001'], 'cost': 10, 'sales': 20}]
